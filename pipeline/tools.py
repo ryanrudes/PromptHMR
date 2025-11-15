@@ -1,4 +1,5 @@
 import os
+import importlib
 import cv2
 import torch
 import numpy as np
@@ -6,9 +7,11 @@ from ultralytics import YOLO
 import supervision as sv
 from collections import defaultdict
 from scipy.interpolate import make_interp_spline, interp1d
+from torch.utils.data import DataLoader
+from torchvision.models import get_model, get_model_weights
 
 from .image_folder import ImageFolder
-
+from rich.progress import *
 
 def est_camera(image):
     if isinstance(image, str):
@@ -103,38 +106,198 @@ def detect_track(images, savedir=None, visualization=False,
     return tracks
 
 
+def _resolve_segmentation_weights(model_name, weight_name):
+    """Return torchvision weights object from flexible user input."""
+    if weight_name is None:
+        try:
+            return get_model_weights(model_name).DEFAULT  # type: ignore[attr-defined]
+        except ValueError:
+            return None
+
+    if isinstance(weight_name, str):
+        if weight_name.lower() == 'none':
+            return None
+        try:
+            weights_enum = get_model_weights(model_name)
+            for candidate in {weight_name, weight_name.upper(), weight_name.lower()}:
+                if hasattr(weights_enum, candidate):
+                    return getattr(weights_enum, candidate)
+        except ValueError:
+            pass
+
+        if '.' in weight_name:
+            enum_name, attr = weight_name.rsplit('.', 1)
+            seg_module = importlib.import_module('torchvision.models.segmentation')
+            weights_cls = getattr(seg_module, enum_name, None)
+            if weights_cls and hasattr(weights_cls, attr):
+                return getattr(weights_cls, attr)
+        raise ValueError(f"Unknown weights '{weight_name}' for model '{model_name}'")
+
+    return weight_name
+
+
+def _build_segmentation_model(model_name, weight_name, device):
+    weights = _resolve_segmentation_weights(model_name, weight_name)
+    try:
+        model = get_model(model_name, weights=weights)
+    except ValueError as exc:
+        raise ValueError(f"Unable to load segmentation model '{model_name}': {exc}") from exc
+    model = model.to(device)
+    model.eval()
+    return model
+
+
+def _is_cuda_oom(error: Exception) -> bool:
+    if isinstance(error, torch.cuda.OutOfMemoryError):
+        return True
+    message = str(error).lower()
+    return 'out of memory' in message
+
+
+def _auto_tune_batch_size(dataset, device, segm_model, max_candidate: int, cpu_workers: int) -> int:
+    """Binary search the largest batch size that fits on the GPU."""
+    if max_candidate < 1:
+        return 1
+    low, high = 1, max_candidate
+    best = 1
+    tune_workers = max(0, min(cpu_workers, 2))
+
+    while low <= high:
+        mid = (low + high) // 2
+        loader = DataLoader(
+            dataset,
+            batch_size=mid,
+            shuffle=False,
+            num_workers=tune_workers,
+            pin_memory=True,
+            pin_memory_device=device,
+        )
+        try:
+            batch = next(iter(loader))
+            imgs = batch['img'].to(device)
+            with torch.inference_mode():
+                segm_model(imgs)['out']
+        except StopIteration:
+            best = mid
+            break
+        except RuntimeError as exc:
+            if _is_cuda_oom(exc):
+                torch.cuda.empty_cache()
+                high = mid - 1
+            else:
+                raise
+        else:
+            best = mid
+            low = mid + 1
+        finally:
+            del loader
+            torch.cuda.empty_cache()
+
+    return max(1, min(best, max_candidate))
+
+
+def _suggest_cpu_workers(num_items: int) -> int:
+    cpu_count = os.cpu_count() or 1
+    if cpu_count <= 2 or num_items <= 1:
+        return 0
+    target = min(8, cpu_count - 1)
+    if num_items < target * 2:
+        target = max(1, num_items // 2)
+    return max(1, target)
+
+
 def detect_segment_track_sam(images, out_path, paths_dict, debug_masks, sam2_type, 
                              detector_type='detectron2', filter_ng_points=False, kp_thres=0.1, 
                              num_max_people=10, height_thresh=0.3, score_thresh=0.4, det_thresh=0.5, 
-                             bbox_interp=False):
-    from torch.utils.data import DataLoader
-    from torchvision.models.segmentation import DeepLabV3_ResNet50_Weights
+                             bbox_interp=False, segmentation_model='deeplabv3_resnet101', 
+                             segmentation_weights='DEFAULT', segmentation_batch_size='auto', 
+                             segmentation_auto_batch_cap=None):
     from detectron2.config import get_cfg
     from .detector.sam2_video_predictor import build_sam2_video_predictor
     from .utils_detectron2 import DefaultPredictor
     
     device = 'cuda'
-    segm_model = torch.hub.load('pytorch/vision:v0.10.0', 'deeplabv3_resnet50', 
-                                weights=DeepLabV3_ResNet50_Weights.DEFAULT).to(device)
-    segm_model.eval()
+    segm_model = _build_segmentation_model(segmentation_model, segmentation_weights, device)
     
-    segm_dataloader = DataLoader(ImageFolder(images), batch_size=8, shuffle=False, 
-                                    num_workers=4 if os.cpu_count() > 4 else os.cpu_count())
+    segm_dataset = ImageFolder(images)
+    total_images = len(segm_dataset)
+    if total_images == 0:
+        raise ValueError("No images provided for segmentation")
+    cpu_workers = _suggest_cpu_workers(total_images)
 
-    deeplab_masks = []
-    for batch in segm_dataloader:
-        for k, v in batch.items():
-            if isinstance(v, torch.Tensor):
-                batch[k] = v.to(device)
-                
-        with torch.no_grad():
-            output = segm_model(batch['img'])['out']
-        mask = (output.argmax(1) == 15).to(torch.float) # the max probability is the person class
-        mask = mask.cpu()
-        deeplab_masks.append(mask > 0.5)
-    deeplab_masks = torch.cat(deeplab_masks, dim=0)
-    masks = deeplab_masks.cpu().numpy()
-    del deeplab_masks
+    use_auto_batch = isinstance(segmentation_batch_size, str) and segmentation_batch_size.lower() == 'auto'
+    if use_auto_batch:
+        if segmentation_auto_batch_cap is None:
+            auto_cap = total_images
+        else:
+            try:
+                auto_cap = int(segmentation_auto_batch_cap)
+            except (TypeError, ValueError):
+                raise ValueError("segmentation_auto_batch_cap must be an integer or null") from None
+        if auto_cap < 1:
+            raise ValueError("segmentation_auto_batch_cap must be >= 1 when provided")
+        auto_cap = max(1, min(auto_cap, total_images))
+        tuned_batch_size = _auto_tune_batch_size(segm_dataset, device, segm_model, auto_cap, cpu_workers)
+        current_batch_size = tuned_batch_size
+        print(f"[Segmentation] Auto-selected batch size: {current_batch_size}")
+    else:
+        try:
+            requested_batch = int(segmentation_batch_size) if segmentation_batch_size is not None else 0
+        except (TypeError, ValueError):
+            raise ValueError(
+                "segmentation_batch_size must be 'auto' or a positive integer"
+            ) from None
+        if requested_batch < 1:
+            raise ValueError("segmentation_batch_size must be >= 1 when using a fixed value")
+        current_batch_size = min(requested_batch, total_images)
+        print(f"[Segmentation] Using fixed batch size: {current_batch_size}")
+
+    progress_columns = [
+        SpinnerColumn(),
+        *Progress.get_default_columns(),
+        TimeElapsedColumn(),
+        TextColumn("{task.completed}/{task.total} images"),
+    ]
+
+    def run_segmentation_pass(batch_size: int) -> np.ndarray:
+        loader = DataLoader(
+            segm_dataset,
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=cpu_workers,
+            pin_memory=True,
+            pin_memory_device=device,
+        )
+        deeplab_masks = []
+        desc = f"{segmentation_model} segmentation (batch={batch_size})"
+        with Progress(*progress_columns) as progress:
+            seg_task = progress.add_task(desc, total=total_images)
+            for batch in loader:
+                imgs = batch['img'].to(device, non_blocking=True)
+                with torch.no_grad():
+                    output = segm_model(imgs)['out']
+                mask = (output.argmax(1) == 15).to(torch.float)
+                mask = mask.cpu()
+                deeplab_masks.append(mask > 0.5)
+                progress.advance(seg_task, imgs.shape[0])
+
+        deeplab_masks = torch.cat(deeplab_masks, dim=0)
+        masks_np = deeplab_masks.cpu().numpy()
+        del deeplab_masks
+        del loader
+        return masks_np
+
+    while True:
+        try:
+            masks = run_segmentation_pass(current_batch_size)
+            break
+        except RuntimeError as exc:
+            if not _is_cuda_oom(exc) or current_batch_size == 1:
+                raise
+            torch.cuda.empty_cache()
+            next_batch = max(1, current_batch_size // 2)
+            print(f"Segmentation OOM at batch size {current_batch_size}, retrying with {next_batch}")
+            current_batch_size = next_batch
     
     sam2_registry = {
         'sam2-hiera-tiny': {

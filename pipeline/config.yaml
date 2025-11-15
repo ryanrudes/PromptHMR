@@ -1,12 +1,29 @@
 calib: null
 focal: null
 stride: 1
+
 # Tracker options:
 # sam2-hiera-tiny, sam2-hiera-small, sam2-hiera-base-plus, sam2-hiera-large
 # sam2.1-hiera-tiny, sam2.1-hiera-small, sam2.1-hiera-base-plus, sam2.1-hiera-large
 tracker: sam2.1-hiera-large
+
 kp2d_detector: vitpose
-depth_method: metric3d_vit_large
+
+# Semantic segmentation model (see torchvision docs for options)
+# https://docs.pytorch.org/vision/0.24/models.html#table-of-all-available-semantic-segmentation-weights
+segmentation_model: deeplabv3_resnet101
+# Available weights are listed per-model in the torchvision table (e.g., DEFAULT, COCO_WITH_VOC_LABELS_V1)
+segmentation_weights: DEFAULT
+# Choose "auto" to let the pipeline find the largest safe batch on your GPU, or set an integer.
+segmentation_batch_size: auto
+# When using auto batching, optionally cap the search space (null means up to the number of frames).
+segmentation_auto_batch_cap: null
+
+# Depth methods options:
+# metric3d_vit_small, metric3d_vit_large, metric3d_vit_giant2
+# zoedepth is unsupported
+depth_method: metric3d_vit_giant2
+
 use_depth: false
 max_height: 896
 calib_method: ba
@@ -24,7 +41,10 @@ bbox_interp: true
 load_images_to_cpu: true
 run_post_opt: true
 run_post_opt_cam: true
+
+# The only option is RANSAC
 floor_fitting: ransac
+
 fps: 30
 postopt_lr: 1e-2
 num_max_people: 1 # 100

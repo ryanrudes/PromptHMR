@@ -57,7 +57,7 @@ python scripts/demo_phmr.py --image data/examples/example_1.jpg --gravity_align
 
 **For world-coordinate video reconstruction**, first install the precompiled wheels as described in our installation guide. After installation, run the example commands below—results will be visualized using Viser.
 If you're working with a long sequence containing many people, consider using `--viser_total` to limit the number of frames visualized, or `--viser_subsample` to subsample frames.
-For other hyperparameters, refer to `pipeline/config.yaml`.
+For other hyperparameters, refer to `pipeline/config.yaml`. In particular, you can now choose any torchvision semantic-segmentation backbone/weights (see the [model zoo](https://docs.pytorch.org/vision/0.24/models.html#table-of-all-available-semantic-segmentation-weights)) by setting `segmentation_model`/`segmentation_weights`, and configure batching via `segmentation_batch_size` (either `auto` or a fixed integer) plus the optional `segmentation_auto_batch_cap` limit when auto-tuning.
 
 ```bash
 # 2. Video world-coordinate reconstruction

@@ -49,16 +49,16 @@ class Pipeline:
             images, seq_folder, fps = load_video_frames(
                 input_video, 
                 output_folder=output_folder, 
-                max_height=896,
-                max_fps=60,
+                #max_height=896,
+                max_fps=120,
             )
         else: 
             # this currently will cause issue with sam2 
             images, seq_folder, img_folder, fps = prepare_inputs(
                 input_video, 
                 output_folder=output_folder, 
-                max_height=896,
-                max_fps=60,
+                #max_height=896,
+                max_fps=120,
             )
         self.fps = fps
         return images, seq_folder
@@ -71,6 +71,8 @@ class Pipeline:
             masks = segment.segment_subjects(self.images)
 
         elif self.cfg.tracker.startswith('sam2'):
+            seg_batch_size = getattr(self.cfg, 'segmentation_batch_size', 'auto')
+            seg_auto_cap = getattr(self.cfg, 'segmentation_auto_batch_cap', None)
             tracks, masks = detect_segment_track_sam(
                 self.images, 
                 self.seq_folder, 
@@ -82,7 +84,11 @@ class Pipeline:
                 det_thresh=self.cfg.det_thresh,
                 score_thresh=self.cfg.det_score_thresh,
                 height_thresh=self.cfg.det_height_thresh,
-                bbox_interp=self.cfg.bbox_interp
+                bbox_interp=self.cfg.bbox_interp,
+                segmentation_model=getattr(self.cfg, 'segmentation_model', 'deeplabv3_resnet50'),
+                segmentation_weights=getattr(self.cfg, 'segmentation_weights', 'DEFAULT'),
+                segmentation_batch_size=seg_batch_size,
+                segmentation_auto_batch_cap=seg_auto_cap,
             )
             
         self.results['masks'] = masks
@@ -105,7 +111,7 @@ class Pipeline:
     
 
     def hps_estimation(self,):
-        if self.cfg.tracker == 'sam2':
+        if self.cfg.tracker.startswith('sam2'):
             mask_prompt = True
         else:
             mask_prompt = False

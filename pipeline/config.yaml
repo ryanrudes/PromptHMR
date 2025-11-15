@@ -1,13 +1,16 @@
 calib: null
 focal: null
 stride: 1
-tracker: sam2
+# Tracker options:
+# sam2-hiera-tiny, sam2-hiera-small, sam2-hiera-base-plus, sam2-hiera-large
+# sam2.1-hiera-tiny, sam2.1-hiera-small, sam2.1-hiera-base-plus, sam2.1-hiera-large
+tracker: sam2.1-hiera-large
 kp2d_detector: vitpose
 depth_method: metric3d_vit_large
 use_depth: false
 max_height: 896
 calib_method: ba
-hand_pose: false
+hand_pose: true # false
 smooth_cam: true
 use_spec_calib: true
 
@@ -24,5 +27,5 @@ run_post_opt_cam: true
 floor_fitting: ransac
 fps: 30
 postopt_lr: 1e-2
-num_max_people: 100
+num_max_people: 1 # 100
 max_fps: 60

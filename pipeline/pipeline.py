@@ -70,13 +70,13 @@ class Pipeline:
                                   bbox_interp=self.cfg.bbox_interp)
             masks = segment.segment_subjects(self.images)
 
-        elif self.cfg.tracker == 'sam2':
+        elif self.cfg.tracker.startswith('sam2'):
             tracks, masks = detect_segment_track_sam(
                 self.images, 
                 self.seq_folder, 
                 self.data_dict,
                 debug_masks=False,
-                sam2_type='tiny',
+                sam2_type=self.cfg.tracker,
                 detector_type='detectron2',
                 num_max_people=self.cfg.num_max_people,
                 det_thresh=self.cfg.det_thresh,

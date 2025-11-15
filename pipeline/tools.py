@@ -137,21 +137,37 @@ def detect_segment_track_sam(images, out_path, paths_dict, debug_masks, sam2_typ
     del deeplab_masks
     
     sam2_registry = {
-        'tiny': {
+        'sam2-hiera-tiny': {
             'checkpoint': paths_dict['sam2'] + '/sam2_hiera_tiny.pt',
             'config': "pipeline/sam2/sam2_hiera_t.yaml",
         },
-        'small': {
+        'sam2-hiera-small': {
             'checkpoint': paths_dict['sam2'] + '/sam2_hiera_small.pt',
             'config': "pipeline/sam2/sam2_hiera_s.yaml",
         },
-        'base_plus': {
+        'sam2-hiera-base-plus': {
             'checkpoint': paths_dict['sam2'] + '/sam2_hiera_base_plus.pt',
             'config': "pipeline/sam2/sam2_hiera_b+.yaml",
         },
-        'large': {
+        'sam2-hiera-large': {
             'checkpoint': paths_dict['sam2'] + '/sam2_hiera_large.pt',
             'config': "pipeline/sam2/sam2_hiera_l.yaml"
+        },
+        'sam2.1-hiera-tiny': {
+            'checkpoint': paths_dict['sam2'] + '/sam2.1_hiera_tiny.pt',
+            'config': "pipeline/sam2/sam2.1_hiera_t.yaml",
+        },
+        'sam2.1-hiera-small': {
+            'checkpoint': paths_dict['sam2'] + '/sam2.1_hiera_small.pt',
+            'config': "pipeline/sam2/sam2.1_hiera_s.yaml",
+        },
+        'sam2.1-hiera-base-plus': {
+            'checkpoint': paths_dict['sam2'] + '/sam2.1_hiera_base_plus.pt',
+            'config': "pipeline/sam2/sam2.1_hiera_b+.yaml",
+        },
+        'sam2.1-hiera-large': {
+            'checkpoint': paths_dict['sam2'] + '/sam2.1_hiera_large.pt',
+            'config': "pipeline/sam2/sam2.1_hiera_l.yaml"
         },
     }
 

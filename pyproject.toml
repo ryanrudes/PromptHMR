@@ -1,0 +1,63 @@
+# When this repo is used as a submodule of data-processor, prefer from repo root:
+#   pip install -e ".[prompthmr]"
+# which installs prompt_hmr plus matching runtime deps. Submodule-only install from repo root:
+#   pip install -e "./prompthmr[run]"
+# Keep the dependency list identical to parent [project.optional-dependencies].prompthmr.
+
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "prompthmr"
+version = "0.1.0"
+description = "PromptHMR: promptable human mesh recovery (submodule: github.com/ryanrudes/PromptHMR)"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+
+# Mirrors data-processor [project.optional-dependencies].prompthmr — keep lists identical.
+[project.optional-dependencies]
+run = [
+    "torch>=2.4.0",
+    "torchvision>=0.19.0",
+    "torchaudio>=2.4.0",
+    "evo==1.29.0",
+    "yacs==0.1.8",
+    "gdown==5.2.0",
+    "einops==0.8.0",
+    "open3d==0.19.0",
+    "loguru==0.7.2",
+    "plyfile==1.0.3",
+    "pyrender==0.1.45",
+    "omegaconf==2.3.0",
+    "keyboard==0.13.5",
+    "pycocotools==2.0.8",
+    "timm==0.9.0",
+    "ultralytics==8.3.80",
+    "supervision==0.25.1",
+    "scikit-image==0.24.0",
+    "segment-anything==1.0",
+    "pytorch-minimize==0.0.2",
+    "pytorch-lightning==2.4.0",
+    "open-clip-torch",
+    "viser==0.2.23",
+    "pyequilib==0.3.0",
+    "mmcv-lite==2.2.0",
+    "mmengine==0.10.4",
+    "opencv-python-headless==4.10.0.84",
+    "imageio[ffmpeg]>=2.9",
+    "ffmpeg==1.4",
+    "openpyxl==3.1.5",
+    "filterpy==1.4.5",
+    "smplx==0.1.28",
+    "fvcore",
+    "pyliblzfse",
+    "smplcodec",
+    "smpl-rs==0.6.1",
+    "gloss-rs==0.6.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["prompt_hmr*"]

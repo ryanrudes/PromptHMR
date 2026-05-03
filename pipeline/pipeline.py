@@ -299,6 +299,13 @@ class Pipeline:
         self.images = images[:max_frame]
         self.seq_folder = seq_folder
         self.cfg.seq_folder = seq_folder
+        # Post-opt + export use cfg.fps. Omit / null in config.yaml → detected rate from
+        # load_frames; set a number to override (legacy fixed-rate behavior).
+        _user_fps = OmegaConf.select(self.cfg, "fps", default=None)
+        if _user_fps is None:
+            self.cfg.fps = float(self.fps)
+        else:
+            self.cfg.fps = float(_user_fps)
 
         if os.path.isfile(f'{seq_folder}/results.pkl'):
             print('Loading available results...')

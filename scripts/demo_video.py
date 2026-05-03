@@ -48,6 +48,16 @@ def main(input_video='data/examples/boxing_short.mp4',
     results = pipeline.__call__(input_video, 
                                 output_folder, 
                                 save_only_essential=True)
+    if abs(float(pipeline.cfg.fps) - float(pipeline.fps)) > 1e-3:
+        print(
+            f"Framerate: using {float(pipeline.cfg.fps):g} fps for post-opt and export "
+            f"(config override; effective rate from loader {float(pipeline.fps):g} fps)."
+        )
+    else:
+        print(
+            f"Framerate: using {float(pipeline.cfg.fps):g} fps for post-opt and export "
+            f"(from loaded video / sequence)."
+        )
     _run_conversion(results)
     # Viser
     if run_viser:

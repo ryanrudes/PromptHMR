@@ -48,7 +48,11 @@ run_post_opt_cam: true
 # The only option is RANSAC
 floor_fitting: ransac
 
-fps: 30
+# Timeline for post-opt smoothing + SMPL/MCS export. Omit this key or set null to use the
+# effective frame rate detected when loading the video. Set a number to force that fps.
+# fps: null
+# fps: 30
+
 postopt_lr: 1e-2
 num_max_people: 1 # 100
 max_fps: 60
